@@ -1,4 +1,4 @@
-# BCC UoB Air Quality
+# BCC Spatial Smoothing App
 
 ### License 
 
