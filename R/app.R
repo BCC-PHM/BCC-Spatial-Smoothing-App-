@@ -54,6 +54,7 @@ ui = page_fluid(
                   selectInput("cases", "Select column of cases", choices = NULL, selected = NULL),
                   selectInput("pop", "Select column of population", choices = NULL, selected = NULL),
                   hr(),
+                  helpText("Note: Please ignore the following because they are not supported under current version"),
                   selectInput("age", "Select column of age", choices = NULL, selected = NULL),
                   selectInput("year", "Select column of year", choices = NULL, selected = NULL)
                 ),
