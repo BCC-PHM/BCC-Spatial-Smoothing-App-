@@ -14,6 +14,7 @@
 *.xlsm
 *.xlsb
 *.csv
+*.zip
 
 
 # Exclude output formats
@@ -24,3 +25,15 @@
 *.ppt
 *.pptx
 *.svg
+
+# Ignore raw data folders
+data/LSOA11_fullUK/
+data/LSOA21_fullUK/
+data/WM_LSOA11_table/
+data/WM_LSOA21_table/
+data/lsoa pop/
+
+# ---------------------------
+# KEEP processed data
+# ---------------------------
+!*.rds
