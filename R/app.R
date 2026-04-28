@@ -9,79 +9,231 @@ library(bslib)
 library(tidyverse)
 library(shinybusy)
 library(zip)
+library(shinyWidgets)
+library(shinythemes)
 
 library("INLA")
 library("spdep")
 library("tmap")
 
+
+####################################
+# Load built-in population data
+
+lsoa11pop = readRDS("data/lsoa11pop.rds")
+lsoa21pop = readRDS("data/lsoa21pop.rds")
+
+ward21cd_pop = readRDS("data/ward21pop_2011_2022.rds")
+
+####################################
+
+
 ui = page_fluid(
+  theme = shinytheme("flatly"),
   titlePanel("BCC Spatial Smoothing App"),     
   navset_card_pill(
-    nav_panel("Step 1: Add you files", 
-              sidebarLayout(
-                sidebarPanel(
-                  width = 3,
-                  #Upload shape file
-                  fileInput("shp_zip", 
-                            "Upload zipped shapefile", 
-                            accept = ".zip"),
-                  #status message of shape 
-                  tags$div(
-                    textOutput("upload_status_shp"),
-                    style = "font-size: 12px; color: red; font-weight: bold;"),
-                  
-                  helpText("Note: Please select the correct area id and area name"),
-
-                  
-                  selectInput("area_id", "Select area id", choices = NULL, selected = NULL),
-                  selectInput("area_name", "Select area name", choices = NULL, selected = NULL),
-                  
-                  hr(),
-                  
-                  #Upload csv file 
-                  fileInput("csv_file",
-                            "Upload a CSV file",
-                            accept = ".csv"),
-                  #status message of csv
-                  tags$div(
-                    textOutput("upload_status_csv"),
-                    style = "font-size: 12px; color: red; font-weight: bold;"
-                  ),
-                  
-                  helpText("Note: Please select the correct column of the count of cases and population"),
-                  
-                  selectInput("area_id2", "Select area id", choices = NULL, selected = NULL),
-                  selectInput("cases", "Select column of cases", choices = NULL, selected = NULL),
-                  selectInput("pop", "Select column of population", choices = NULL, selected = NULL),
-                  hr(),
-                  helpText("Note: Please ignore the following because they are not supported under current version"),
-                  selectInput("age", "Select column of age", choices = NULL, selected = NULL),
-                  selectInput("year", "Select column of year", choices = NULL, selected = NULL)
-                ),
-                
-                mainPanel(
-                  fluidRow(
-                    column(
-                      width = 6,
-                      leafletOutput("map_plot", height = "600px")
-                    ),
-                    column(
-                      width = 6,
-                      DTOutput("tbl_shp")
-                    )),
-                  fluidRow(
-                    column(
-                      width = 12,
-                      DTOutput("tbl_csv")
-                    )),
-                  fluidRow(
-                    column(
-                      width = 12,
-                      DTOutput("tbl_joined")
-                    ))
-              )
+    nav_panel(
+      "Step 1: Add your files",
+      sidebarLayout(
+        sidebarPanel(
+          width = 3,
+          
+          h4("Analysis setup"),
+          
+          selectInput(
+            "analysis_type",
+            "Choose analysis type",
+            choices = c(
+              "Spatial model" = "spatial",
+              "Spatial age-standardised model" = "spatial_age_standardised",
+              "Spatio-temporal model" = "spatiotemporal",
+              "Spatio-temporal age-standardised model" = "spatiotemporal_age_standardised"
             )
           ),
+          
+          hr(),
+          
+          fileInput(
+            "shp_zip",
+            "Upload zipped shapefile",
+            accept = ".zip"
+          ),
+          
+          tags$div(
+            textOutput("upload_status_shp"),
+            style = "font-size: 12px; color: red; font-weight: bold;"
+          ),
+          
+          helpText("Note: Please select the correct area id and area name"),
+          
+          selectInput("area_id", "Select area id", choices = NULL, selected = NULL),
+          selectInput("area_name", "Select area name", choices = NULL, selected = NULL),
+          
+          hr(),
+          
+          fileInput(
+            "csv_file",
+            "Upload a CSV file",
+            accept = ".csv"
+          ),
+          
+          tags$div(
+            textOutput("upload_status_csv"),
+            style = "font-size: 12px; color: red; font-weight: bold;"
+          ),
+          
+          helpText("Note: Please select the correct column of the count of cases and population"),
+          
+          selectInput("area_id2", "Select area id", choices = NULL, selected = NULL),
+          selectInput("cases", "Select column of cases", choices = NULL, selected = NULL),
+          
+          # -------------------------------------------------------------------
+          # Population denominator setup
+          # -------------------------------------------------------------------
+          
+          checkboxInput(
+            "use_builtin_pop",
+            "Use built-in population denominator",
+            value = FALSE
+          ),
+          
+          # Built-in population options
+          conditionalPanel(
+            condition = "input.use_builtin_pop == true",
+            
+            selectInput(
+              "builtin_pop_geo",
+              "Select population geography",
+              choices = c(
+                "LSOA 2011" = "lsoa11",
+                "LSOA 2021" = "lsoa21",
+                "Ward 2021" = "ward21"
+              )
+            ),
+            
+            conditionalPanel(
+              condition = "input.analysis_type == 'spatial' || input.analysis_type == 'spatial_age_standardised'",
+              
+              tags$p(
+                "If population data is not available for the selected financial year, the latest available population denominator will be used.",
+                style = "color: red; font-weight: bold; font-size: 14px; margin-bottom: 5px;"
+              ),
+              
+              selectInput(
+                "builtin_pop_year",
+                "Select financial year of your data",
+                choices = NULL
+              )
+              
+              
+            )
+          ),
+          
+          # User-supplied population column
+          conditionalPanel(
+            condition = "input.use_builtin_pop == false",
+            
+            selectInput(
+              "pop",
+              "Select column of population",
+              choices = NULL,
+              selected = NULL
+            )
+          ),
+          
+          # Year column for temporal models
+          conditionalPanel(
+            condition = "input.analysis_type == 'spatiotemporal' || input.analysis_type == 'spatiotemporal_age_standardised'",
+            
+            tags$p(
+              "Please ensure the financial year is formatted as 'YYYY' (e.g., FY 2024/25 to 2425).",
+              style = "color: red; font-weight: bold; font-size: 14px; margin-bottom: 5px;"
+            ),
+            
+            selectInput(
+              "year",
+              "Select financial year column in your data",
+              choices = NULL,
+              selected = NULL
+            )
+          ),
+          
+          # Age column for age-standardised models
+          conditionalPanel(
+            condition = "input.analysis_type == 'spatial_age_standardised' || input.analysis_type == 'spatiotemporal_age_standardised'",
+            
+            helpText("Age column is only needed for age-standardised models."),
+            
+            selectInput(
+              "age",
+              "Select column of age group",
+              choices = NULL,
+              selected = NULL
+            )
+       
+          ),
+          
+          # Age groups to select for every models
+          # default will opt-in every age groups 
+          conditionalPanel(
+            condition = "input.use_builtin_pop == true",
+            
+            tags$p(
+              "Default includes all age groups. For custom age groups not shown here, please provide your own population column.",
+              style = "color: red; font-weight: bold; font-size: 14px; margin-bottom: 5px;"
+            ),
+            
+            pickerInput(
+              inputId = "age_group_picker",
+              label = "Number of observation:",
+              choices =  c(
+                "UNDER 1", "1-4",  "5-9",   "10-14", "15-19", "20-24",
+                "25-29",   "30-34","35-39", "40-44", "45-49", "50-54",
+                "55-59",   "60-64","65-69", "70-74", "75-79", "80-84",
+                "85-89",   "90+"
+              ),
+              multiple = TRUE,
+              selected =  c(
+                "UNDER 1", "1-4",  "5-9",   "10-14", "15-19", "20-24",
+                "25-29",   "30-34","35-39", "40-44", "45-49", "50-54",
+                "55-59",   "60-64","65-69", "70-74", "75-79", "80-84",
+                "85-89",   "90+"
+              )
+            )
+            
+            
+          )
+          
+          
+          
+        ),
+        
+        mainPanel(
+          fluidRow(
+            column(
+              width = 6,
+              leafletOutput("map_plot", height = "600px")
+            ),
+            column(
+              width = 6,
+              DTOutput("tbl_shp")
+            )
+          ),
+          fluidRow(
+            column(
+              width = 12,
+              DTOutput("tbl_csv")
+            )
+          ),
+          fluidRow(
+            column(
+              width = 12,
+              DTOutput("tbl_joined")
+            )
+          )
+        )
+      )
+    ),
     nav_panel("Step 2: Run the analysis",
               sidebarLayout(
                 sidebarPanel(
@@ -233,6 +385,93 @@ ui = page_fluid(
 
 server = function(input, output, session) {
   
+  
+  # --- Update Shapefile Selectors ---
+  
+  observeEvent(shp_data(), {
+    cols = names(st_drop_geometry(shp_data()))
+    
+    # Add an empty string at the start of the choices
+    choices_with_blank = c("Please select..." = "", cols)
+    
+    updateSelectInput(session, "area_id", 
+                      choices = choices_with_blank,
+                      selected = "")
+  })
+  
+  observeEvent(shp_data(), {
+    cols = names(st_drop_geometry(shp_data()))
+    
+    # Add an empty string at the start of the choices
+    choices_with_blank = c("Please select..." = "", cols)
+    
+    updateSelectInput(session, "area_name", 
+                      choices = choices_with_blank,
+                      selected = "")
+  })
+  
+  
+  
+  #===========================================================
+  #the built-in population logic
+  #-----------------------------------------------------------
+  observe({
+    req(input$builtin_pop_geo)
+    
+    pop_data = switch(
+      input$builtin_pop_geo,
+      "lsoa11" = lsoa11pop,
+      "lsoa21" = lsoa21pop,
+      "ward21" = ward21cd_pop
+    )
+    
+    updateSelectInput(
+      session,
+      "builtin_pop_year",
+      choices = sort(unique(pop_data$fin_year)),
+      selected = max(sort(unique(pop_data$fin_year)))
+    )
+    
+  })
+  
+  # --- Update CSV Selectors ---
+  observeEvent(csv_data(), {
+    cols = names(csv_data())
+    
+    # Add an empty string at the start of the choices
+    choices_with_blank = c("Please select..." = "", cols)
+    
+    updateSelectInput(session, "cases", choices = choices_with_blank, selected = "")
+    updateSelectInput(session, "pop", choices = choices_with_blank, selected = "")
+    updateSelectInput(session, "area_id2", choices = choices_with_blank, selected = "")
+    updateSelectInput(session, "age", choices = choices_with_blank, selected = "")
+    updateSelectInput(session, "year", choices = choices_with_blank, selected = "")
+  })
+  
+  #create built-in poulation reactive 
+  builtin_pop_selected = reactive({
+    req(input$use_builtin_pop)
+    req(input$builtin_pop_geo)
+    
+    pop_data = switch(
+      input$builtin_pop_geo,
+      "lsoa11" = lsoa11pop %>%
+        rename(geo_id = LSOA11CD, geo_name = LSOA11NM, lad_name = LAD17NM),
+      
+      "lsoa21" = lsoa21pop %>%
+        rename(geo_id = LSOA21CD, geo_name = LSOA21NM, lad_name = LAD21NM),
+      
+      "ward21" = ward21cd_pop %>%
+        rename(geo_id = WD21CD, geo_name = WD21NM, lad_name = LAD21NM)
+    )
+    
+    pop_data
+  })
+  
+  
+
+  
+  
   #  Show loading screen when button is clicked
   observeEvent(input$run_model, {
     show_modal_spinner(
@@ -316,72 +555,234 @@ server = function(input, output, session) {
     datatable(csv_data())
   })
   
-  
-  #user selected area id for later analysis use from shp 
-  
-  observeEvent(shp_data(), {
-    updateSelectInput(session, "area_id", 
-                      choices = names(st_drop_geometry(shp_data())),
-                      selected = NULL)
-    })
-  
-  observeEvent(shp_data(), {
-    updateSelectInput(session, "area_name", 
-                      choices = names(st_drop_geometry(shp_data())),
-                      selected = NULL)
-  })
-  
-  observeEvent(csv_data(), {
-    updateSelectInput(session, "cases", 
-                      choices = names(csv_data()),
-                      selected = NULL)
-  })
-  
-  observeEvent(csv_data(), {
-    updateSelectInput(session, "pop", 
-                      choices = names(csv_data()),
-                      selected = NULL)
-  })
-  
-  observeEvent(csv_data(), {
-    updateSelectInput(session, "area_id2", 
-                      choices = names(csv_data()),
-                      selected = NULL)
-  })
-  
-  observeEvent(csv_data(), {
-    updateSelectInput(session, "age", 
-                      choices = names(csv_data()),
-                      selected = NULL)
-  })
-  
-  observeEvent(csv_data(), {
-    updateSelectInput(session, "year", 
-                      choices = names(csv_data()),
-                      selected = NULL)
-  })
-  
+
   ##############################################################################
   #create joined dataset 
   
   joined_data = reactive({
-    req(shp_data(), csv_data(), input$area_id, input$area_id2, input$cases, input$pop)
+    req(shp_data(), csv_data(), input$area_id, input$area_id2, input$cases)
     
     shp = shp_data()
     csv = csv_data()
     
+    # Create join ID in both spatial file and uploaded CSV
     shp$id_join = as.character(shp[[input$area_id]])
     csv$id_join = as.character(csv[[input$area_id2]])
+    
+    if (isTRUE(input$use_builtin_pop)) {
+      
+      req(input$age_group_picker)
+      
+      # to prevent left_join from creating "pop.x" and "pop.y"
+      csv = csv %>% select(-any_of(c("pop", "standard_pop")))
+      
+      
+    
+    # ------------------------------------------------------------
+    # 1) Spatial model
+    # Join by area only; one selected financial year; population summed over selected age groups
+    # ------------------------------------------------------------
+    
+    if (input$analysis_type =="spatial") {
+      
+      req(input$builtin_pop_year)
+      
+      pop_lookup = builtin_pop_selected() %>%
+        filter(fin_year == input$builtin_pop_year,
+               age_band %in% input$age_group_picker)%>%
+        group_by(geo_id) %>%
+        summarise(
+          pop = sum(count, na.rm = TRUE),
+          standard_pop = sum(standard_pop, na.rm = TRUE),
+          .groups = "drop"
+        ) %>%
+        mutate(id_join = as.character(geo_id)) %>% 
+        select(id_join, pop, standard_pop)
+      
+      csv = csv %>%
+        left_join(pop_lookup, by = "id_join")
+      
+      pop_col = "pop"
+     }
+     
+    # ------------------------------------------------------------
+    # 2) Spatial age-standardised model
+    # Join by area + age band; one selected financial year; population kept by age band
+    # ------------------------------------------------------------
+    
+    if (input$analysis_type == "spatial_age_standardised") {
+    
+      
+      req(input$builtin_pop_year, input$age)
+      
+      pop_lookup = builtin_pop_selected() %>%
+        filter(
+          fin_year == input$builtin_pop_year,
+          age_band %in% input$age_group_picker
+        ) %>%
+        mutate(
+          id_join = as.character(geo_id),
+          age_join = as.character(age_band)
+        ) %>%
+        select(id_join, age_join, pop = count, standard_pop)
+      
+      csv = csv %>%
+        mutate(age_join = as.character(.data[[input$age]])) %>%
+        left_join(pop_lookup, by = c("id_join", "age_join"))
+      
+      pop_col = "pop"
+    }
+
+    # ------------------------------------------------------------
+    # 3) Spatio-temporal model
+    # Join by area + financial year; population summed over selected age groups   
+    # ------------------------------------------------------------
+    if (input$analysis_type == "spatiotemporal") {
+      req(input$year)
+    
+      pop_lookup = builtin_pop_selected() %>%
+        filter(age_band %in% input$age_group_picker) %>%
+        group_by(geo_id, fin_year) %>%
+        summarise(
+          pop = sum(count, na.rm = TRUE),
+          standard_pop = sum(standard_pop, na.rm = TRUE),
+          .groups = "drop"
+        ) %>%
+        mutate(
+          id_join = as.character(geo_id),
+          year_join = as.character(fin_year)
+        ) %>%
+        select(id_join, year_join, pop, standard_pop)
+      
+      csv = csv %>%
+        mutate(year_join = as.character(.data[[input$year]])) %>%
+        left_join(pop_lookup, by = c("id_join", "year_join"))
+      pop_col = "pop"
+    }
+    
+    # ------------------------------------------------------------
+    # 4) Spatio-temporal age-standardised model
+    # Join by area + age band + financial year; population kept by age band
+    # ------------------------------------------------------------
+    if (input$analysis_type == "spatiotemporal_age_standardised") {
+      req(input$year, input$age)
+      
+      
+      pop_lookup = builtin_pop_selected() %>%
+        filter(age_band %in% input$age_group_picker) %>%
+        mutate(
+          id_join = as.character(geo_id),
+          age_join = as.character(age_band),
+          year_join = as.character(fin_year)
+        ) %>%
+        select(id_join, age_join, year_join, pop = count, standard_pop)
+      
+      csv = csv %>%
+        mutate(
+          age_join = as.character(.data[[input$age]]),
+          year_join = as.character(.data[[input$year]])
+        ) %>%
+        left_join(pop_lookup, by = c("id_join", "age_join", "year_join"))
+      pop_col = "pop"
+    }
+    
+  } else {
+    
+    req(input$pop)
+    pop_col = input$pop
+    
+    if (input$analysis_type %in% c("spatiotemporal", "spatiotemporal_age_standardised")) {
+      req(input$year)
+      csv = csv %>%
+        mutate(year_join = as.character(.data[[input$year]]))
+    
+    }
+  }
+    
+  # -------------------------------------------------------------------------
+  # Create final joined dataset depending on analysis type
+  # -------------------------------------------------------------------------
+    
+
+    
+  if (input$analysis_type == "spatial"){
     
     merged = shp %>% 
       left_join(csv, by = "id_join")
     
-    merged$Proportion_unsmoothed = (merged[[input$cases]] / merged[[input$pop]]) * 100
+    merged$Proportion_unsmoothed =
+      (merged[[input$cases]] / merged[[pop_col]]) * 100
     
+
+  } 
+    
+  if (input$analysis_type == "spatial_age_standardised"){  
+    
+    csv_asr = csv %>%
+      mutate(
+        cases = as.numeric(.data[[input$cases]]),
+        pop = as.numeric(.data[[pop_col]]),
+        age_specific_rate = cases / pop,
+        weighted_rate = age_specific_rate * standard_pop
+      ) %>%
+      group_by(id_join) %>%
+      summarise(
+        cases = sum(cases, na.rm = TRUE),
+        pop = sum(pop, na.rm = TRUE),
+        standard_pop_total = sum(standard_pop, na.rm = TRUE),
+        ASR_unsmoothed = (sum(weighted_rate, na.rm = TRUE) / standard_pop_total) * 100000,
+        .groups = "drop"
+      )
+    
+    merged = shp %>% 
+      left_join(csv_asr, by = "id_join")
+    
+  }
+    
+  if (input$analysis_type == "spatiotemporal"){ 
+    csv_rate = csv %>%
+      mutate(
+        cases = as.numeric(.data[[input$cases]]),
+        pop = as.numeric(.data[[pop_col]])
+      ) %>%
+      group_by(id_join, year_join) %>%
+      summarise(
+        cases = sum(cases, na.rm = TRUE),
+        pop = sum(pop, na.rm = TRUE),
+        Proportion_unsmoothed = (cases / pop) * 100,
+        .groups = "drop"
+      )
+    
+    
+    merged = shp %>%
+      left_join(csv_rate, by = "id_join")
+  }
+  
+    if (input$analysis_type == "spatiotemporal_age_standardised") {
+      csv_asr_time = csv %>%
+        mutate(
+          cases = as.numeric(.data[[input$cases]]),
+          pop = as.numeric(.data[[pop_col]]),
+          age_specific_rate = cases / pop,
+          weighted_rate = age_specific_rate * standard_pop
+        ) %>%
+        group_by(id_join, year_join) %>%
+        summarise(
+          cases = sum(cases, na.rm = TRUE),
+          pop = sum(pop, na.rm = TRUE),
+          standard_pop_total = sum(standard_pop, na.rm = TRUE),
+          ASR_unsmoothed = (sum(weighted_rate, na.rm = TRUE) / standard_pop_total) * 100000,
+          .groups = "drop"
+        )
+      
+      merged = shp %>%
+        left_join(csv_asr_time, by = "id_join")
+      
+  }
+  
     merged
     
   })
-  
   
   output$tbl_joined = renderDT({
     req(joined_data())
