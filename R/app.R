@@ -185,7 +185,7 @@ ui = page_fluid(
             
             pickerInput(
               inputId = "age_group_picker",
-              label = "Number of observation:",
+              label = "Age groups:",
               choices =  c(
                 "UNDER 1", "1-4",  "5-9",   "10-14", "15-19", "20-24",
                 "25-29",   "30-34","35-39", "40-44", "45-49", "50-54",
@@ -336,51 +336,60 @@ ui = page_fluid(
                   
                   tabPanel(
                     "Download",
+                    
+                    # --- Header ---
+                    br(), br(),
+                    helpText("Tick the boxes to select what you want to download"),
+                    hr(),
+                    
+                    # --- Map Selection ---
+                    h3("Maps"),
                     br(),
+                    checkboxGroupInput(
+                      inputId  = "checkbox_maps",
+                      label    = NULL,
+                      inline   = TRUE,
+                      selected = c("unsmoothed", "median", "lower", "upper"),
+                      choices  = c(
+                        "Unsmoothed map"  = "unsmoothed",
+                        "Smoothed median" = "median",
+                        "Lower limit"     = "lower",
+                        "Upper limit"     = "upper"
+                      )
+                    ),
+                    
+                    # --- File Format ---
+                    br(),
+                    helpText("Choose file format"),
+                    radioButtons(
+                      inputId  = "download_format",
+                      label    = NULL,
+                      inline   = TRUE,
+                      selected = "png",
+                      choices  = c(
+                        "PNG" = "png", 
+                        "PDF" = "pdf"
+                      )
+                    ),
+                    
+                    # --- Processed Data & Download Button ---
+                    hr(),
+                    h3("Processed data"),
+                    br(), 
+                    hr(),
                     fluidRow(
                       column(
                         width = 2,
                         downloadButton("download_output", "Download")
                       )
-                    ),
-                    br(),
-                    helpText("Tick the boxes to select what you want to download"),
-                    hr(),
-                    h3("Maps"),
-                    br(),
-                    checkboxGroupInput(
-                      "checkbox_maps",
-                      label = NULL,
-                      choices = c("Unsmoothed map" = "unsmoothed",
-                                  "Smoothed median" = "median",
-                                  "Lower limit" = "lower",
-                                  "Upper limit" = "upper"),
-                      selected = c("unsmoothed", "median", "lower", "upper"),
-                      inline = TRUE
-                    ),
-                    br(),
-                    helpText("Choose file format"),
-                    radioButtons(
-                      "download_format",
-                      label = NULL,
-                      choices = c("PNG" = "png", "PDF"="pdf"),
-                      selected = "png",
-                      inline = TRUE
-                    ),
-                    hr()
-                    
-
-                    
-                    
+                    )
+                   )
                   )
-                  )
-                  
-                  
-                  )
+                 )
               )
  
   )
-)
+ )
 )
 
 server = function(input, output, session) {
