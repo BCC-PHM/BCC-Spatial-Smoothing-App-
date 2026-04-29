@@ -688,8 +688,13 @@ server = function(input, output, session) {
     
   } else {
     
-    req(input$pop)
-    pop_col = input$pop
+    #require user to select the pop column from their own provided data 
+    req(input$pop)  
+    
+    # Immediately create a standard 'pop' column from the user's choice
+    # and make sure it is numeric!
+    csv$pop = as.numeric(csv[[input$pop]])
+    pop_col = "pop"
     
     if (input$analysis_type %in% c("spatiotemporal", "spatiotemporal_age_standardised")) {
       req(input$year)
@@ -841,11 +846,11 @@ server = function(input, output, session) {
   
   modelresult = reactive({
     req(input$run_model >0)
-    req(analysis_data(), g(), input$area_id, input$area_id2, input$cases, input$pop)
+    req(analysis_data(), g(), input$area_id, input$area_id2, input$cases)
     
     shp = analysis_data()
     shp$y = shp[[input$cases]]
-    shp$pop = shp[[input$pop]]
+
     
     #make sure the y has no decimal places
     shp$y = round(shp$y)
