@@ -72,9 +72,9 @@ ui = page_fluid(
           hr(),
           
           fileInput(
-            "csv_file",
-            "Upload a CSV file",
-            accept = ".csv"
+            "csv_or_excel_file",
+            "Upload a CSV or XLSX file",
+            accept = c(".csv", ".xlsx", ".xls")
           ),
           
           tags$div(
@@ -389,7 +389,7 @@ ui = page_fluid(
               )
  
   )
- )
+)
 )
 
 server = function(input, output, session) {
@@ -515,12 +515,25 @@ server = function(input, output, session) {
     
   })
   
-  #csv data
+  #=============================================================
+  #csv data or xlsx data
+  #-------------------------------------------------------------
   
   csv_data = reactive({
-    req(input$csv_file)
+    req(input$csv_or_excel_file)
     
-    read.csv(input$csv_file$datapath)
+    file_ext = tools::file_ext(input$csv_or_excel_file$name)
+    
+    if (file_ext == "csv") {
+      read.csv(input$csv_or_excel_file$datapath)
+      
+    } else if (file_ext  %in% c("xlsx", "xls")) {
+      readxl::read_excel(input$csv_or_excel_file$datapath)
+      
+    } else {
+      stop("Unsupported file type")
+    }
+    
     })
   
   
@@ -540,14 +553,20 @@ server = function(input, output, session) {
   #map output to visualise shp file 
   
   output$map_plot = renderLeaflet({
-    leaflet(shp_data() )%>% 
+    req(shp_data(), input$area_name)
+    
+    shp = shp_data() %>%
+      mutate(popup_name = as.character(.data[[input$area_name]]))
+    
+    
+    leaflet(shp)%>% 
       addProviderTiles("CartoDB.Positron") %>% 
       addPolygons(
         color = "black",        # outline colour
         weight = 2,           # outline thickness
         fillColor = "grey60",   # fill colour
         fillOpacity = 0.5,    # transparency
-        popup = paste0("test")
+        popup = ~popup_name
       )
 })
   
@@ -567,6 +586,18 @@ server = function(input, output, session) {
 
   ##############################################################################
   #create joined dataset 
+  
+  #===========================================
+  #blocks to ensure age groups are in order
+  age_levels = c(
+    "UNDER 1", "1-4", "5-9", "10-14", "15-19",
+    "20-24", "25-29", "30-34", "35-39", "40-44",
+    "45-49", "50-54", "55-59", "60-64", "65-69",
+    "70-74", "75-79", "80-84", "85-89", "90+"
+  )
+  #===========================================
+  
+  
   
   joined_data = reactive({
     req(shp_data(), csv_data(), input$area_id, input$area_id2, input$cases)
@@ -624,22 +655,39 @@ server = function(input, output, session) {
       
       req(input$builtin_pop_year, input$age)
       
+      selected_age_levels = age_levels[age_levels %in% input$age_group_picker]
+      
       pop_lookup = builtin_pop_selected() %>%
         filter(
           fin_year == input$builtin_pop_year,
-          age_band %in% input$age_group_picker
+          age_band %in% selected_age_levels
         ) %>%
         mutate(
           id_join = as.character(geo_id),
           age_join = as.character(age_band)
         ) %>%
+        filter(id_join %in% shp$id_join) %>%
         select(id_join, age_join, pop = count, standard_pop)
       
       csv = csv %>%
-        mutate(age_join = as.character(.data[[input$age]])) %>%
-        left_join(pop_lookup, by = c("id_join", "age_join"))
+        mutate(age_join = as.character(.data[[input$age]]),
+               cases = as.numeric(.data[[input$cases]])) %>%
+        filter(age_join %in% selected_age_levels) %>% 
+        select(id_join, age_join, cases)
+      
+      csv = pop_lookup %>% 
+        left_join(csv , by = c("id_join", "age_join")) %>% 
+        mutate(
+          cases = tidyr::replace_na(cases, 0),
+          age_join = factor(age_join, levels = selected_age_levels, ordered = TRUE)
+        ) %>% 
+        arrange(id_join, age_join)
+      
+      message("Rows in age-specific csv after population join: ", nrow(csv))
       
       pop_col = "pop"
+      
+      
     }
 
     # ------------------------------------------------------------
@@ -648,6 +696,9 @@ server = function(input, output, session) {
     # ------------------------------------------------------------
     if (input$analysis_type == "spatiotemporal") {
       req(input$year)
+      
+      #Find the maximum available financial year in the chosen built-in data
+      max_pop_year = as.character(max(builtin_pop_selected()$fin_year, na.rm = TRUE))
     
       pop_lookup = builtin_pop_selected() %>%
         filter(age_band %in% input$age_group_picker) %>%
@@ -659,13 +710,16 @@ server = function(input, output, session) {
         ) %>%
         mutate(
           id_join = as.character(geo_id),
-          year_join = as.character(fin_year)
+          pop_year_join = as.character(fin_year) # Create a specific column for the fallback join
         ) %>%
-        select(id_join, year_join, pop, standard_pop)
+        select(id_join, pop_year_join, pop, standard_pop)
       
       csv = csv %>%
-        mutate(year_join = as.character(.data[[input$year]])) %>%
-        left_join(pop_lookup, by = c("id_join", "year_join"))
+        mutate(year_join = as.character(.data[[input$year]]),
+               # If user year is greater than max_pop_year, substitute it with max_pop_year
+               pop_year_join = if_else(year_join > max_pop_year, max_pop_year, year_join)) %>%
+        left_join(pop_lookup, by = c("id_join", "pop_year_join"))
+      
       pop_col = "pop"
     }
     
@@ -675,6 +729,9 @@ server = function(input, output, session) {
     # ------------------------------------------------------------
     if (input$analysis_type == "spatiotemporal_age_standardised") {
       req(input$year, input$age)
+
+      # Find the maximum available financial year in the chosen built-in data
+      max_pop_year = as.character(max(builtin_pop_selected()$fin_year, na.rm = TRUE))
       
       
       pop_lookup = builtin_pop_selected() %>%
@@ -682,16 +739,17 @@ server = function(input, output, session) {
         mutate(
           id_join = as.character(geo_id),
           age_join = as.character(age_band),
-          year_join = as.character(fin_year)
+          pop_year_join = as.character(fin_year)
         ) %>%
-        select(id_join, age_join, year_join, pop = count, standard_pop)
+        select(id_join, age_join, pop_year_join, pop = count, standard_pop)
       
       csv = csv %>%
         mutate(
           age_join = as.character(.data[[input$age]]),
-          year_join = as.character(.data[[input$year]])
+          year_join = as.character(.data[[input$year]]),
+          pop_year_join = if_else(year_join > max_pop_year, max_pop_year, year_join)
         ) %>%
-        left_join(pop_lookup, by = c("id_join", "age_join", "year_join"))
+        left_join(pop_lookup, by = c("id_join", "age_join", "pop_year_join"))
       pop_col = "pop"
     }
     
@@ -732,25 +790,34 @@ server = function(input, output, session) {
     
   if (input$analysis_type == "spatial_age_standardised"){  
     
-    csv_asr = csv %>%
+    csv = csv %>%
       mutate(
-        cases = as.numeric(.data[[input$cases]]),
+        cases = as.numeric(cases),
         pop = as.numeric(.data[[pop_col]]),
+        Age_index = as.integer(age_join),
         age_specific_rate = cases / pop,
         weighted_rate = age_specific_rate * standard_pop
-      ) %>%
+      )
+    
+    csv_asr = csv %>%
       group_by(id_join) %>%
       summarise(
-        cases = sum(cases, na.rm = TRUE),
-        pop = sum(pop, na.rm = TRUE),
-        standard_pop_total = sum(standard_pop, na.rm = TRUE),
-        ASR_unsmoothed = (sum(weighted_rate, na.rm = TRUE) / standard_pop_total) * 100000,
+        ASR_unsmoothed = sum(weighted_rate, na.rm = TRUE) / 
+          sum(standard_pop, na.rm = TRUE) * 100000,
         .groups = "drop"
       )
     
-    merged = shp %>% 
-      left_join(csv_asr, by = "id_join")
-    
+    merged = csv %>%
+      left_join(csv_asr, by = "id_join") %>%
+      left_join(
+        shp %>% st_drop_geometry() %>% select(id_join, all_of(input$area_name)),
+        by = "id_join"
+      ) %>%
+      left_join(
+        shp %>% select(id_join, geometry),
+        by = "id_join"
+      ) %>%
+      st_as_sf()
   }
     
   if (input$analysis_type == "spatiotemporal"){ 
@@ -815,7 +882,8 @@ server = function(input, output, session) {
     shp = joined_data()
     
     # Create a stable numeric ID for each areaID
-    shp$new_id = 1:nrow(shp)
+    #stable per-area id, not per-row
+    shp$new_id = as.integer(factor(shp$id_join, levels = unique(shp$id_join)))
     
     # Reproject to British National Grid (EPSG:27700)
     # Using metres avoids angular distortion and improves geometric operations
@@ -834,8 +902,12 @@ server = function(input, output, session) {
     
     shp = analysis_data()
     
+    # CHANGED: one row per area for adjacency
+    shp_area = shp[!duplicated(shp$new_id), ]
+    shp_area = shp_area[order(shp_area$new_id), ]
+    
     # Create adjacency list
-    mcnty_nb = poly2nb(shp, row.names = as.character(shp$new_id), queen = TRUE)
+    mcnty_nb = poly2nb(shp_area, row.names = as.character(shp_area$new_id), queen = TRUE)
     
     # Convert the nb object into an adjacency file required by R-INLA
     adj_path = tempfile(fileext = ".adj")
@@ -858,12 +930,14 @@ server = function(input, output, session) {
     req(analysis_data(), g(), input$area_id, input$area_id2, input$cases)
     
     shp = analysis_data()
-    shp$y = shp[[input$cases]]
+    result = NULL
+    
+    if (input$analysis_type =="spatial"){
+      #make sure the y has no decimal places
+      shp$y = round(shp[[input$cases]])
+    
 
-    
-    #make sure the y has no decimal places
-    shp$y = round(shp$y)
-    
+    #define the formula
     formula = y ~ 1 + f(new_id,
                             model = "bym2",
                             graph = g(),
@@ -874,15 +948,63 @@ server = function(input, output, session) {
                               phi = list(prior = "pc", param = c(input$phi_u, input$phi_alpha))
                             ))
     
+    #fit the model
     inla(
       formula,
       data = st_drop_geometry(shp),
       family = "poisson",
       offset = log(pop),
       control.predictor = list(compute = TRUE),
-      verbose = TRUE
-    )
+      verbose = TRUE)
     
+    }
+    
+   else if (input$analysis_type == "spatial_age_standardised"){
+     
+     inla_dat = st_drop_geometry(shp) %>%
+       mutate(
+         count = round(as.numeric(cases)),
+         area_index = new_id
+       )
+     
+     #define the formula
+     formula = count ~ 1 + # fixed intercept
+        f(Age_index,
+          model = "ar1",
+          constr = TRUE, # impose sum-to-zero constraint for identifiability
+          hyper = list(
+           theta1 = list(prior = "pc.prec", param = c(1, 0.01)), # PC prior on age-effect precision (encourages smoothness)
+           theta2 = list(prior = "pc.cor1", param = c(0, 0.9)) # PC prior on AR(1) correlation across adjacent age groups
+         )
+        )+
+       f(
+         area_index,
+         model = "bym2",
+         graph = g(),
+         scale.model = TRUE, # scale BYM2 components for consistent interpretation across graphs
+         hyper = list(
+           # PC prior for precision (overall variability / smoothing strength)
+           prec = list(prior = "pc.prec", param = c(input$prec_u, input$prec_alpha)),
+           # PC prior for phi (mix between spatially structured vs unstructured variation)
+           phi = list(prior = "pc", param = c(input$phi_u, input$phi_alpha))
+         ),
+         group = Age_index, # allow spatial effect to vary by age group
+         control.group = list(model = "ar1") # AR(1) dependence of spatial effects across age groups
+       )
+     
+     #fit the model
+     inla(
+       formula,
+       family = "poisson",
+       offset = log(pop),
+       data = inla_dat,
+       control.predictor = list(compute = TRUE), # compute posterior for fitted values
+       control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE), # model fit metrics + leave-one-out diagnostics
+       verbose = TRUE
+     )
+     
+     
+   }
 
   })
   
@@ -899,6 +1021,8 @@ server = function(input, output, session) {
     fitmod = modelresult()
     
     
+    if (input$analysis_type =="spatial"){
+      
     data = shp %>%
       cbind(
         fitmod$summary.fitted.values[, c("mean", "0.025quant","0.5quant", "0.975quant")]
@@ -915,6 +1039,44 @@ server = function(input, output, session) {
       )
       
     data
+    }
+    
+    else if (input$analysis_type == "spatial_age_standardised"){
+      #2026-06-08 carry on from here
+      data = shp %>%
+        cbind(
+          fitmod$summary.fitted.values[, c("mean", "0.025quant","0.5quant", "0.975quant")]
+        ) %>%
+        rename(
+          lower025 = X0.025quant,
+          median = X0.5quant,
+          upper975 = X0.975quant
+        ) %>%
+        mutate(
+          asr_count_median = (median / pop) * standard_pop,
+          asr_count_ll = (lower025 / pop) * standard_pop,
+          asr_count_ul = (upper975 / pop) * standard_pop
+        ) %>%
+        group_by(id_join) %>%
+        summarise(
+          local_event = sum(cases, na.rm = TRUE),
+          local_pop = sum(pop, na.rm = TRUE),
+          Standard_Population = sum(standard_pop, na.rm = TRUE),
+          age_standardised_count = sum(asr_count_median, na.rm = TRUE),
+          age_standardised_count_ll = sum(asr_count_ll, na.rm = TRUE),
+          age_standardised_count_ul = sum(asr_count_ul, na.rm = TRUE),
+          age_standardised_rate = age_standardised_count / Standard_Population * 100000,
+          age_standardised_rate_LL = age_standardised_count_ll / Standard_Population * 100000,
+          age_standardised_rate_UL = age_standardised_count_ul / Standard_Population * 100000,
+          .groups = "drop"
+        )
+
+      data
+      
+    }
+    
+    
+    
   })
     
 
@@ -1011,6 +1173,8 @@ server = function(input, output, session) {
     req(input$run_model > 0)
     req(joined_data(), data_smoothed())
     
+    if(input$analysis_type =="spatial"){
+    
     list(
       unsmoothed = make_tmap(
         data = joined_data(),
@@ -1044,6 +1208,51 @@ server = function(input, output, session) {
         colour = map_settings$upper$colour
       )
     )
+    }
+    
+    else if (input$analysis_type =="spatial_age_standardised"){
+      
+      joined_asr_map = joined_data() %>%
+        group_by(id_join) %>%
+        slice(1) %>%
+        ungroup()
+      
+      list(
+        unsmoothed = make_tmap(
+          data = joined_asr_map,
+          fill_var = "ASR_unsmoothed",
+          title = map_settings$unsmoothed$title,
+          unit = map_settings$unsmoothed$unit,
+          colour = map_settings$unsmoothed$colour
+        ),
+        
+        median = make_tmap(
+          data = data_smoothed(),
+          fill_var = "age_standardised_rate",
+          title = map_settings$median$title,
+          unit = map_settings$median$unit,
+          colour = map_settings$median$colour
+        ),
+        
+        lower = make_tmap(
+          data = data_smoothed(),
+          fill_var = "age_standardised_rate_LL",
+          title = map_settings$lower$title,
+          unit = map_settings$lower$unit,
+          colour = map_settings$lower$colour
+        ),
+        
+        upper = make_tmap(
+          data = data_smoothed(),
+          fill_var = "age_standardised_rate_UL",
+          title = map_settings$upper$title,
+          unit = map_settings$upper$unit,
+          colour = map_settings$upper$colour
+        )
+      )
+      
+      
+    }
   })
   
   
