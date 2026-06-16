@@ -24,7 +24,7 @@
 *.pdf
 *.ppt
 *.pptx
-*.svg
+
 
 # Ignore raw data folders
 data/LSOA11_fullUK/

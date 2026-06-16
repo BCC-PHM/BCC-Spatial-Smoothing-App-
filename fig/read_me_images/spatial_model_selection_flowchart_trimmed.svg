@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2200" height="1220" viewBox="0 0 2200 1220" role="img" aria-labelledby="title desc">
+  <title id="title">Spatial Model Selection Flowchart</title>
+  <desc id="desc">Decision flowchart for choosing a spatial smoothing model from data structure and outcome measure.</desc>
+  <defs>
+    <style>
+      .bg { fill: none; }
+      .line { fill: none; stroke: #696965; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; marker-end: url(#arrow); }
+      .top-card, .question-card { fill: #f1efe9; stroke: #d8d4cc; stroke-width: 2.5; }
+      .time-card { fill: #ecebff; stroke: #aaa4ff; stroke-width: 3; }
+      .cross-card { fill: #dff6ee; stroke: #7adfc2; stroke-width: 3; }
+      .asr-time-card { fill: #f9e8e1; stroke: #f29a7c; stroke-width: 3; }
+      .asr-cross-card { fill: #fff0d8; stroke: #f3ac36; stroke-width: 3; }
+      .top-text { font: 700 44px Arial, Helvetica, sans-serif; fill: #444440; text-anchor: middle; dominant-baseline: middle; }
+      .question-text { font: 700 40px Arial, Helvetica, sans-serif; fill: #444440; text-anchor: middle; dominant-baseline: middle; }
+      .branch-label { font: 700 34px Arial, Helvetica, sans-serif; fill: #3c3c39; text-anchor: middle; }
+      .node-title { font: 700 38px Arial, Helvetica, sans-serif; text-anchor: middle; dominant-baseline: middle; }
+      .node-subtitle { font: 400 32px Arial, Helvetica, sans-serif; text-anchor: middle; dominant-baseline: middle; }
+      .model-title { font: 700 36px Arial, Helvetica, sans-serif; text-anchor: middle; dominant-baseline: middle; }
+      .model-subtitle { font: 400 29px Arial, Helvetica, sans-serif; text-anchor: middle; dominant-baseline: middle; }
+      .legend-text { font: 700 29px Arial, Helvetica, sans-serif; fill: #3c3c39; dominant-baseline: middle; }
+      .time-text { fill: #37318d; }
+      .time-subtext { fill: #6156c7; }
+      .cross-text { fill: #075f51; }
+      .cross-subtext { fill: #137a66; }
+      .asr-time-text { fill: #7a2a13; }
+      .asr-cross-text { fill: #704100; }
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8.4" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#696965"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" width="2200" height="1220"/>
+
+  <rect class="top-card" x="740" y="70" width="720" height="120" rx="60"/>
+  <text class="top-text" x="1100" y="130">What is your data structure?</text>
+
+  <path class="line" d="M 900 190 L 500 345"/>
+  <path class="line" d="M 1300 190 L 1700 345"/>
+  <text class="branch-label" x="625" y="305">Time series</text>
+  <text class="branch-label" x="1575" y="305">Cross-sectional</text>
+
+  <rect class="time-card" x="190" y="350" width="600" height="130" rx="18"/>
+  <text class="node-title time-text" x="490" y="408">Time series data</text>
+  <text class="node-subtitle time-subtext" x="490" y="455">Multiple time points</text>
+
+  <rect class="cross-card" x="1410" y="350" width="600" height="130" rx="18"/>
+  <text class="node-title cross-text" x="1710" y="408">Cross-sectional data</text>
+  <text class="node-subtitle cross-subtext" x="1710" y="455">Single time point</text>
+
+  <path class="line" d="M 490 480 L 490 615"/>
+  <path class="line" d="M 1710 480 L 1710 615"/>
+
+  <rect class="question-card" x="150" y="620" width="680" height="115" rx="18"/>
+  <text class="question-text" x="490" y="678">What is your outcome measure?</text>
+
+  <rect class="question-card" x="1370" y="620" width="680" height="115" rx="18"/>
+  <text class="question-text" x="1710" y="678">What is your outcome measure?</text>
+
+  <path class="line" d="M 365 735 L 255 900"/>
+  <path class="line" d="M 615 735 L 735 900"/>
+  <text class="branch-label" x="285" y="845">Prevalence</text>
+  <text class="branch-label" x="720" y="845">ASR</text>
+
+  <path class="line" d="M 1585 735 L 1475 900"/>
+  <path class="line" d="M 1835 735 L 1955 900"/>
+  <text class="branch-label" x="1505" y="845">Prevalence</text>
+  <text class="branch-label" x="1940" y="845">ASR</text>
+
+  <rect class="time-card" x="50" y="905" width="440" height="170" rx="18"/>
+  <text class="model-title time-text" x="270" y="963">Spatio-temporal</text>
+  <text class="model-title time-text" x="270" y="1009">model</text>
+  <text class="model-subtitle time-subtext" x="270" y="1053">e.g. BYM2 + AR(1)</text>
+
+  <rect class="asr-time-card" x="530" y="905" width="440" height="170" rx="18"/>
+  <text class="model-title asr-time-text" x="750" y="956">Spatio-temporal</text>
+  <text class="model-title asr-time-text" x="750" y="1002">age-standardised</text>
+  <text class="model-subtitle asr-time-text" x="750" y="1048">model</text>
+
+  <rect class="cross-card" x="1230" y="905" width="440" height="170" rx="18"/>
+  <text class="model-title cross-text" x="1450" y="963">Spatial model</text>
+  <text class="model-subtitle cross-subtext" x="1450" y="1010">BYM2 Poisson</text>
+  <text class="model-subtitle cross-subtext" x="1450" y="1053">cross-sectional</text>
+
+  <rect class="asr-cross-card" x="1710" y="905" width="440" height="170" rx="18"/>
+  <text class="model-title asr-cross-text" x="1930" y="956">Spatial</text>
+  <text class="model-title asr-cross-text" x="1930" y="1002">age-standardised</text>
+  <text class="model-subtitle asr-cross-text" x="1930" y="1048">model</text>
+
+  <rect x="50" y="1140" width="30" height="30" rx="4" fill="#aaa4ff"/>
+  <text class="legend-text" x="100" y="1156">Time series path</text>
+  <rect x="520" y="1140" width="30" height="30" rx="4" fill="#7adfc2"/>
+  <text class="legend-text" x="570" y="1156">Cross-sectional path</text>
+  <rect x="1005" y="1140" width="30" height="30" rx="4" fill="#f29a7c"/>
+  <text class="legend-text" x="1055" y="1156">Age-standardised (time series)</text>
+  <rect x="1600" y="1140" width="30" height="30" rx="4" fill="#f3ac36"/>
+  <text class="legend-text" x="1650" y="1156">Age-standardised (cross-sectional)</text>
+</svg>
